@@ -20,7 +20,6 @@ declare module "next-auth" {
   interface Session {
     user: {
       id: string;
-      activeOrgId: string | null;
       memberships: SessionMembership[];
     } & DefaultSession["user"];
   }
@@ -29,7 +28,6 @@ declare module "next-auth" {
 declare module "next-auth/jwt" {
   interface JWT {
     sub?: string;
-    activeOrgId?: string | null;
     memberships?: SessionMembership[];
   }
 }
@@ -58,7 +56,7 @@ async function loadMemberships(userId: string): Promise<SessionMembership[]> {
   }));
 }
 
-export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
+export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
   providers: [
     Credentials({
@@ -90,25 +88,15 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
   ],
   callbacks: {
     ...authConfig.callbacks,
-    async jwt({ token, user, trigger, session }) {
+    async jwt({ token, user }) {
       if (user?.id) {
         token.sub = user.id;
-        const mships = await loadMemberships(user.id);
-        token.memberships = mships;
-        token.activeOrgId = mships[0]?.orgId ?? null;
-      }
-      if (trigger === "update" && token.memberships) {
-        const next = (session as { user?: { activeOrgId?: string } } | undefined)
-          ?.user?.activeOrgId;
-        if (next && token.memberships.some((m) => m.orgId === next)) {
-          token.activeOrgId = next;
-        }
+        token.memberships = await loadMemberships(user.id);
       }
       return token;
     },
     async session({ session, token }) {
       if (token.sub) session.user.id = token.sub;
-      session.user.activeOrgId = token.activeOrgId ?? null;
       session.user.memberships = token.memberships ?? [];
       return session;
     },

@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { auth } from "@/auth";
+import { resolveActiveMembership } from "@/lib/auth/scope";
 import { TopNav } from "@/components/app/top-nav";
 
 export default async function AppLayout({
@@ -7,15 +7,12 @@ export default async function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const session = await auth();
-  if (!session?.user?.id) redirect("/sign-in");
+  const { session, membership } = await resolveActiveMembership();
   const memberships = session.user.memberships;
-  if (memberships.length === 0) {
+  if (!membership) {
     redirect("/sign-up");
   }
-  const active =
-    memberships.find((m) => m.orgId === session.user.activeOrgId) ??
-    memberships[0];
+  const active = membership;
   return (
     <div className="min-h-screen bg-background">
       <TopNav

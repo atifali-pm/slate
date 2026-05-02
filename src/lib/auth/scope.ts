@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import type { MemberRole } from "@/db/schema";
+import { readActiveOrgCookie } from "./active-org";
 
 export type OrgScope = {
   userId: string;
@@ -18,20 +19,22 @@ export async function requireSession() {
   return session;
 }
 
-export async function requireOrgScope(): Promise<OrgScope> {
+export async function resolveActiveMembership() {
   const session = await requireSession();
-  const activeOrgId = session.user.activeOrgId;
-  if (!activeOrgId) {
-    throw new Error(
-      "No active organization. User must belong to an org before reaching org-scoped routes.",
-    );
-  }
-  const membership = session.user.memberships.find(
-    (m) => m.orgId === activeOrgId,
-  );
+  const memberships = session.user.memberships;
+  if (memberships.length === 0) return { session, membership: null };
+  const cookieOrgId = await readActiveOrgCookie();
+  const fromCookie = cookieOrgId
+    ? memberships.find((m) => m.orgId === cookieOrgId)
+    : undefined;
+  return { session, membership: fromCookie ?? memberships[0] };
+}
+
+export async function requireOrgScope(): Promise<OrgScope> {
+  const { session, membership } = await resolveActiveMembership();
   if (!membership) {
     throw new Error(
-      "Active org_id is not in user's memberships. Session is stale or tampered.",
+      "User has no organization memberships. Sign-up should have created one.",
     );
   }
   return {
