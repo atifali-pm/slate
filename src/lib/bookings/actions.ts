@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { bookings, customers, services, memberships } from "@/db/schema";
 import type { BookingStatus } from "@/db/schema";
@@ -16,6 +16,8 @@ import {
   createBookingSchema,
   rescheduleBookingSchema,
   updateStatusSchema,
+  bulkStatusSchema,
+  updateNotesSchema,
   deleteBookingSchema,
 } from "./validation";
 
@@ -173,6 +175,73 @@ export async function updateBookingStatusAction(
     .where(and(eq(bookings.id, existing.id), eq(bookings.orgId, scope.orgId)));
   revalidatePath("/dashboard");
   return { ok: true, data: { id: existing.id, status: parsed.data.status } };
+}
+
+export async function updateBookingNotesAction(
+  raw: unknown,
+): Promise<ActionResult<{ id: string }>> {
+  const parsed = updateNotesSchema.safeParse(raw);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+  const scope = await requireOrgScope();
+  const result = await db
+    .update(bookings)
+    .set({ notes: parsed.data.notes, updatedAt: new Date() })
+    .where(
+      and(eq(bookings.id, parsed.data.bookingId), eq(bookings.orgId, scope.orgId)),
+    )
+    .returning({ id: bookings.id });
+  if (result.length === 0) return { ok: false, error: "Booking not found." };
+  revalidatePath("/dashboard");
+  return { ok: true, data: { id: result[0].id } };
+}
+
+export async function bulkUpdateStatusAction(
+  raw: unknown,
+): Promise<ActionResult<{ updated: number; rejected: string[] }>> {
+  const parsed = bulkStatusSchema.safeParse(raw);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+  const scope = await requireOrgScope();
+
+  const existing = await db
+    .select({ id: bookings.id, status: bookings.status })
+    .from(bookings)
+    .where(
+      and(
+        eq(bookings.orgId, scope.orgId),
+        inArray(bookings.id, parsed.data.bookingIds),
+      ),
+    );
+
+  const target = parsed.data.status;
+  const eligible: string[] = [];
+  const rejected: string[] = [];
+  for (const row of existing) {
+    if (ALLOWED_TRANSITIONS[row.status].includes(target)) eligible.push(row.id);
+    else rejected.push(row.id);
+  }
+  if (eligible.length === 0) {
+    return {
+      ok: true,
+      data: { updated: 0, rejected },
+    };
+  }
+
+  await db
+    .update(bookings)
+    .set({ status: target, updatedAt: new Date() })
+    .where(
+      and(
+        eq(bookings.orgId, scope.orgId),
+        inArray(bookings.id, eligible),
+      ),
+    );
+
+  revalidatePath("/dashboard");
+  return { ok: true, data: { updated: eligible.length, rejected } };
 }
 
 export async function deleteBookingAction(

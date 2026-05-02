@@ -27,6 +27,16 @@ export const updateStatusSchema = z.object({
   status: z.enum(bookingStatusEnum.enumValues),
 });
 
+export const bulkStatusSchema = z.object({
+  bookingIds: z.array(z.string().uuid()).min(1).max(100),
+  status: z.enum(bookingStatusEnum.enumValues),
+});
+
+export const updateNotesSchema = z.object({
+  bookingId: z.string().uuid(),
+  notes: z.string().max(500).nullable(),
+});
+
 export const deleteBookingSchema = z.object({
   bookingId: z.string().uuid(),
 });

@@ -1,4 +1,14 @@
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gte,
+  ilike,
+  inArray,
+  lte,
+  type SQL,
+} from "drizzle-orm";
 import { db } from "@/db";
 import {
   bookings,
@@ -87,4 +97,73 @@ export async function listRecentBookings(
     .orderBy(desc(bookings.startAt))
     .limit(limit);
   return rows;
+}
+
+export type BookingFilters = {
+  from?: Date;
+  to?: Date;
+  status?: BookingStatus[];
+  staffUserId?: string;
+  query?: string;
+};
+
+export type FilteredBooking = RecentBooking & {
+  notes: string | null;
+  customerId: string;
+  serviceId: string;
+  staffUserId: string;
+  durationMinutes: number;
+};
+
+export async function listFilteredBookings(
+  orgId: string,
+  filters: BookingFilters,
+  pagination: { limit: number; offset: number } = { limit: 50, offset: 0 },
+): Promise<{ rows: FilteredBooking[]; total: number }> {
+  const conditions: SQL[] = [eq(bookings.orgId, orgId)];
+  if (filters.from) conditions.push(gte(bookings.startAt, filters.from));
+  if (filters.to) conditions.push(lte(bookings.startAt, filters.to));
+  if (filters.status && filters.status.length > 0) {
+    conditions.push(inArray(bookings.status, filters.status));
+  }
+  if (filters.staffUserId) {
+    conditions.push(eq(bookings.staffUserId, filters.staffUserId));
+  }
+  if (filters.query && filters.query.trim().length > 0) {
+    conditions.push(ilike(customers.name, `%${filters.query.trim()}%`));
+  }
+
+  const where = and(...conditions);
+  const [rows, totalRow] = await Promise.all([
+    db
+      .select({
+        id: bookings.id,
+        startAt: bookings.startAt,
+        endAt: bookings.endAt,
+        status: bookings.status,
+        notes: bookings.notes,
+        customerId: bookings.customerId,
+        serviceId: bookings.serviceId,
+        staffUserId: bookings.staffUserId,
+        customerName: customers.name,
+        serviceName: services.name,
+        staffName: users.name,
+        durationMinutes: services.durationMinutes,
+      })
+      .from(bookings)
+      .innerJoin(customers, eq(customers.id, bookings.customerId))
+      .innerJoin(services, eq(services.id, bookings.serviceId))
+      .innerJoin(users, eq(users.id, bookings.staffUserId))
+      .where(where)
+      .orderBy(asc(bookings.startAt))
+      .limit(pagination.limit)
+      .offset(pagination.offset),
+    db
+      .select({ value: bookings.id })
+      .from(bookings)
+      .innerJoin(customers, eq(customers.id, bookings.customerId))
+      .where(where),
+  ]);
+
+  return { rows, total: totalRow.length };
 }
