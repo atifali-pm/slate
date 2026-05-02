@@ -4,6 +4,7 @@ import { useTransition } from "react";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -48,20 +49,22 @@ export function OrgSwitcher({
         </span>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-64">
-        <DropdownMenuLabel>Switch organization</DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        {memberships.map((m) => (
-          <DropdownMenuItem
-            key={m.orgId}
-            onSelect={() => pick(m.orgId)}
-            className="flex items-center justify-between"
-          >
-            <span>{m.orgName}</span>
-            <span className="text-xs uppercase tracking-wide text-muted-foreground">
-              {m.role}
-            </span>
-          </DropdownMenuItem>
-        ))}
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>Switch organization</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          {memberships.map((m) => (
+            <DropdownMenuItem
+              key={m.orgId}
+              onClick={() => pick(m.orgId)}
+              className="flex items-center justify-between"
+            >
+              <span>{m.orgName}</span>
+              <span className="text-xs uppercase tracking-wide text-muted-foreground">
+                {m.role}
+              </span>
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   );

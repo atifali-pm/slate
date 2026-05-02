@@ -38,7 +38,7 @@ export function SignUpForm() {
             id="orgSlug"
             name="orgSlug"
             required
-            pattern="[a-z0-9-]+"
+            pattern="[a-z0-9\-]+"
             placeholder="bellas-salon"
           />
         </div>
