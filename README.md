@@ -44,3 +44,5 @@ Screenshots land in `/screenshots/` as each phase ships. More appear here as the
 ![Landing](screenshots/01-home.png)
 ![Sign in](screenshots/02-sign-in.png)
 ![Dashboard placeholder](screenshots/03-dashboard.png)
+![Org switcher](screenshots/04-org-switcher.png)
+![Switched to Pinecrest Clinic](screenshots/05-dashboard-pinecrest.png)
