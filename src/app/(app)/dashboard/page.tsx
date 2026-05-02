@@ -1,15 +1,5 @@
-import { count, eq } from "drizzle-orm";
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { db } from "@/db";
-import { bookings, customers, services } from "@/db/schema";
 import { requireOrgScope } from "@/lib/auth/scope";
 import {
   listFilteredBookings,
@@ -22,9 +12,16 @@ import {
   PAGE_SIZE,
   buildSearchString,
 } from "@/lib/bookings/url-filters";
+import {
+  loadAnalyticsSummary,
+  loadStaffUtilization,
+  loadTopServices,
+  rangeForLast,
+} from "@/lib/analytics/queries";
 import { BookingsFilters } from "@/components/bookings/bookings-filters";
 import { BookingsTable } from "@/components/bookings/bookings-table";
 import { NewBookingDialog } from "@/components/bookings/new-booking-dialog";
+import { AnalyticsCards } from "@/components/analytics/analytics-cards";
 import Link from "next/link";
 
 function nextWeekdayAtTen() {
@@ -51,18 +48,16 @@ export default async function DashboardPage({
   const params = await searchParams;
   const filters = parseFiltersFromParams(params);
 
+  const last30 = rangeForLast(30);
   const [
-    bookingCountRow,
-    customerCountRow,
-    serviceCountRow,
     customerList,
     serviceList,
     staffList,
     filtered,
+    summary,
+    topServices,
+    utilization,
   ] = await Promise.all([
-    db.select({ value: count() }).from(bookings).where(eq(bookings.orgId, scope.orgId)),
-    db.select({ value: count() }).from(customers).where(eq(customers.orgId, scope.orgId)),
-    db.select({ value: count() }).from(services).where(eq(services.orgId, scope.orgId)),
     listOrgCustomers(scope.orgId),
     listOrgServices(scope.orgId),
     listOrgStaff(scope.orgId),
@@ -77,13 +72,10 @@ export default async function DashboardPage({
       },
       { limit: PAGE_SIZE, offset: (filters.page - 1) * PAGE_SIZE },
     ),
+    loadAnalyticsSummary(scope.orgId),
+    loadTopServices(scope.orgId, last30.from, last30.to),
+    loadStaffUtilization(scope.orgId, last30.from, last30.to),
   ]);
-
-  const stats = [
-    { label: "Bookings", value: bookingCountRow[0]?.value ?? 0, description: "Total in this org" },
-    { label: "Customers", value: customerCountRow[0]?.value ?? 0, description: "People who have booked" },
-    { label: "Services", value: serviceCountRow[0]?.value ?? 0, description: "Offerings on the menu" },
-  ];
 
   const totalPages = Math.max(1, Math.ceil(filtered.total / PAGE_SIZE));
   const currentPage = filters.page;
@@ -121,19 +113,13 @@ export default async function DashboardPage({
         ) : null}
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        {stats.map((stat) => (
-          <Card key={stat.label}>
-            <CardHeader className="pb-2">
-              <CardDescription>{stat.label}</CardDescription>
-              <CardTitle className="text-3xl">{stat.value}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground">{stat.description}</p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      {!noOrgData ? (
+        <AnalyticsCards
+          summary={summary}
+          topServices={topServices}
+          utilization={utilization}
+        />
+      ) : null}
 
       {noOrgData ? (
         <p className="text-sm text-muted-foreground">
