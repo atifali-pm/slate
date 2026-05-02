@@ -40,6 +40,8 @@ Seed data ships as Bella's Salon: haircut, color, blowout services; staff named 
 Screenshots land in `/screenshots/` as each phase ships. More appear here as the build progresses.
 
 ![Bookings dashboard with filters, pagination, and inline actions](screenshots/03-dashboard.png)
+![Calendar week view with status-colored blocks](screenshots/08-calendar-week.png)
+![Calendar day view with staff columns and drag-to-reschedule](screenshots/09-calendar-day.png)
 ![Edit booking dialog (reschedule + notes + delete)](screenshots/07-edit-dialog.png)
 ![Mobile-responsive layout (390px wide)](screenshots/06-bookings-mobile.png)
 ![Org switcher](screenshots/04-org-switcher.png)

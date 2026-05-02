@@ -1,4 +1,5 @@
 import { count, eq } from "drizzle-orm";
+import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
 import {
   Card,
@@ -102,12 +103,21 @@ export default async function DashboardPage({
           </p>
         </div>
         {!noOrgData ? (
-          <NewBookingDialog
-            customers={customerList}
-            services={serviceList}
-            staff={staffList}
-            defaultStartAt={nextWeekdayAtTen()}
-          />
+          <div className="flex items-center gap-2">
+            <Link
+              href="/dashboard/calendar"
+              className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+              data-testid="open-calendar"
+            >
+              Calendar view
+            </Link>
+            <NewBookingDialog
+              customers={customerList}
+              services={serviceList}
+              staff={staffList}
+              defaultStartAt={nextWeekdayAtTen()}
+            />
+          </div>
         ) : null}
       </div>
 
