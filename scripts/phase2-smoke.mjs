@@ -36,34 +36,45 @@ async function signIn(page, email, password) {
   ]);
 }
 
+async function openNewBookingDialog(page) {
+  await page.click('[data-testid="open-new-booking"]');
+  await page.waitForSelector('[data-testid="new-booking-dialog"]', { timeout: 5000 });
+}
+
 async function fillBookingForm(page, { startAt }) {
   // pick the first option in each select that is not the disabled placeholder
   for (const name of ["customerId", "serviceId", "staffUserId"]) {
-    const sel = page.locator(`select[name="${name}"]`);
+    const sel = page.locator(`[data-testid="new-booking-form"] select[name="${name}"]`);
     const options = await sel
       .locator("option:not([disabled])")
       .evaluateAll((els) => els.map((e) => e.value).filter(Boolean));
     if (options.length === 0) fail(`no options for ${name}`);
     await sel.selectOption(options[0]);
   }
-  const start = page.locator('input[name="startAt"]');
+  const start = page.locator('[data-testid="new-booking-form"] input[name="startAt"]');
   await start.fill(startAt);
 }
 
 async function submitForm(page) {
+  // expect either dialog closes (success) or error appears (failure)
   await Promise.all([
     page.waitForResponse(
-      (r) => r.request().method() === "POST" && r.url().endsWith("/dashboard"),
+      (r) => r.request().method() === "POST" && new URL(r.url()).pathname === "/dashboard",
     ),
-    page.click('[data-testid="new-booking-form"] button[type="submit"]'),
+    page.click('[data-testid="new-booking-submit"]'),
   ]);
-  // wait for the React state update to flush a result message
   await page.waitForFunction(() => {
-    return Boolean(
-      document.querySelector('[data-testid="booking-success"]') ||
-        document.querySelector('[data-testid="booking-error"]'),
-    );
+    const err = document.querySelector('[data-testid="new-booking-error"]');
+    const dialog = document.querySelector('[data-testid="new-booking-dialog"]');
+    // either error message visible, or dialog closed
+    return Boolean(err) || !dialog;
   }, { timeout: 5000 });
+}
+
+async function getDialogResult(page) {
+  const err = await page.locator('[data-testid="new-booking-error"]').textContent().catch(() => null);
+  if (err) return { ok: false, message: err };
+  return { ok: true, message: "dialog closed" };
 }
 
 const browser = await chromium.launch({ headless: true });
@@ -80,103 +91,91 @@ try {
   await signIn(page, "maria@bellas-salon.test", "demo1234");
 
   // ---- Test 1: create a booking at a known-empty future slot ----
-  // Use a slot far enough out and unusual enough that the seed loop is unlikely to have hit it
   const future = nextWeekdayDateTimeLocal(14, 33, 14);
+  await openNewBookingDialog(page);
   await fillBookingForm(page, { startAt: future });
   await submitForm(page);
-  const okMsg = await page.locator('[data-testid="booking-success"]').textContent({ timeout: 5000 });
-  if (!okMsg?.includes("Booked")) fail(`expected success message, got: ${okMsg}`);
-  pass(`created booking at ${future}: ${okMsg.trim()}`);
+  const result1 = await getDialogResult(page);
+  if (!result1.ok) fail(`expected booking success, got: ${result1.message}`);
+  pass(`created booking at ${future}`);
 
   // ---- Test 2: same slot/staff/service again => conflict ----
-  // After a successful action, React 19 resets the <form action={fn}> form, which
-  // wipes the select values. Reload the page to get a fresh form, then refill.
   await page.goto(`${BASE}/dashboard`);
+  await openNewBookingDialog(page);
   await fillBookingForm(page, { startAt: future });
   await submitForm(page);
-  const conflictMsg = await page.locator('[data-testid="booking-error"]').textContent({ timeout: 5000 });
-  if (!conflictMsg?.toLowerCase().includes("conflict")) {
-    fail(`expected conflict error, got: ${conflictMsg}`);
+  const result2 = await getDialogResult(page);
+  if (result2.ok) fail("expected conflict, dialog closed instead");
+  if (!result2.message.toLowerCase().includes("conflict")) {
+    fail(`expected conflict error, got: ${result2.message}`);
   }
-  pass(`conflict rejected: ${conflictMsg.trim()}`);
+  pass(`conflict rejected: ${result2.message.trim()}`);
+  await page.click('[data-slot=dialog-close]').catch(() => {});
 
   // ---- Test 3: outside availability (8am before the 9am rule) => rejected ----
   await page.goto(`${BASE}/dashboard`);
   const earlyMorning = nextWeekdayDateTimeLocal(8, 0, 21);
+  await openNewBookingDialog(page);
   await fillBookingForm(page, { startAt: earlyMorning });
   await submitForm(page);
-  const availMsg = await page.locator('[data-testid="booking-error"]').textContent({ timeout: 5000 });
-  if (!availMsg?.toLowerCase().includes("working hours") &&
-      !availMsg?.toLowerCase().includes("availability")) {
-    fail(`expected availability error, got: ${availMsg}`);
+  const result3 = await getDialogResult(page);
+  if (result3.ok) fail("expected availability rejection, dialog closed instead");
+  if (!result3.message.toLowerCase().includes("working hours") &&
+      !result3.message.toLowerCase().includes("availability")) {
+    fail(`expected availability error, got: ${result3.message}`);
   }
-  pass(`outside availability rejected: ${availMsg.trim()}`);
+  pass(`outside availability rejected: ${result3.message.trim()}`);
+  await page.click('[data-slot=dialog-close]').catch(() => {});
 
-  // ---- Test 4: confirm the booking we created in Test 1 ----
-  await page.goto(`${BASE}/dashboard`);
-  // find the row whose start time matches; the recent list shows local-format dates
-  // simpler: find the most-recently-created pending booking and confirm it
-  const pendingRows = page.locator('[data-testid^="booking-row-"]:has([data-testid^="status-"])')
-    .filter({ has: page.locator('[data-testid^="status-"]:has-text("pending")') });
-  const firstPending = pendingRows.first();
-  if (!(await firstPending.isVisible())) fail("no pending booking row visible to confirm");
-  const confirmBtn = firstPending.locator('[data-testid^="action-confirmed-"]').first();
+  // ---- Test 4: confirm a pending booking ----
+  await page.goto(`${BASE}/dashboard?status=pending`);
+  const pendingBadge = page.locator('[data-testid^="status-"]:has-text("pending")').first();
+  if (!(await pendingBadge.isVisible())) fail("no pending booking visible to confirm");
+  const pendingId = (await pendingBadge.getAttribute("data-testid"))?.replace("status-", "");
+  if (!pendingId) fail("could not extract booking id from pending row");
+  const confirmBtn = page.locator(`[data-testid="action-confirmed-${pendingId}"]`);
   await Promise.all([
     page.waitForResponse(
-      (r) => r.request().method() === "POST" && r.url().endsWith("/dashboard"),
+      (r) => r.request().method() === "POST" && new URL(r.url()).pathname === "/dashboard",
     ),
     confirmBtn.click(),
   ]);
-  await page.waitForTimeout(200);
-  await page.goto(`${BASE}/dashboard`);
-  const confirmedRows = await page
-    .locator('[data-testid^="status-"]:has-text("confirmed")')
-    .count();
-  if (confirmedRows === 0) fail("no confirmed badges after confirm action");
-  pass(`status transition pending -> confirmed succeeded`);
+  await page.waitForTimeout(300);
+  // re-fetch with the same id; the row should now show "confirmed" or be gone (filtered out of pending view)
+  await page.goto(`${BASE}/dashboard?status=confirmed`);
+  const newStatus = await page.locator(`[data-testid="status-${pendingId}"]`).textContent();
+  if (newStatus?.trim() !== "confirmed") fail(`expected confirmed, got ${newStatus}`);
+  pass(`status transition pending -> confirmed succeeded for ${pendingId.slice(0, 8)}`);
 
-  // ---- Test 5: cross-org isolation: a booking made in Bella's must not show in Pinecrest ----
-  // switch to Pinecrest via the org switcher
+  // ---- Test 5: cross-org isolation ----
   const trigger = page.locator('[data-slot=dropdown-menu-trigger]');
   await trigger.click();
   await page.waitForSelector('[role=menu]', { timeout: 5000 });
   const pinecrestItem = page.locator('[role=menuitem]', { hasText: "Pinecrest Clinic" });
   await Promise.all([
     page.waitForResponse(
-      (r) => r.request().method() === "POST" && r.url().endsWith("/dashboard"),
+      (r) => r.request().method() === "POST" && new URL(r.url()).pathname === "/dashboard",
     ),
     pinecrestItem.click(),
   ]);
   await page.goto(`${BASE}/dashboard`);
-  // count rows; just need to verify it's not Bella's
-  const pinecrestNav = await page
-    .locator('[data-slot=dropdown-menu-trigger]')
-    .textContent();
+  const pinecrestNav = await page.locator('[data-slot=dropdown-menu-trigger]').textContent();
   if (!pinecrestNav?.includes("Pinecrest")) fail(`switch did not stick; nav: ${pinecrestNav}`);
-  // Pinecrest seed had 30 bookings; the booking we just created in Bella's must not be here
-  const allRowsHere = await page.locator('[data-testid^="booking-row-"]').count();
-  if (allRowsHere > 10) fail(`unexpected row count in Pinecrest: ${allRowsHere}`);
-  pass(`Pinecrest dashboard scoped correctly (${allRowsHere} rows visible, none from Bella's)`);
+  // Pinecrest dashboard summary should show 30 total bookings, not Bella's 60-something
+  const summary = await page.locator('[data-testid="bookings-summary"]').textContent();
+  if (summary?.includes("60") || summary?.includes("61")) {
+    fail(`Pinecrest dashboard summary suggests Bella's data leaked: ${summary}`);
+  }
+  pass(`Pinecrest dashboard scoped correctly: ${summary?.trim()}`);
 
-  // ---- Capture Bella's dashboard for the README (replaces the Phase 1 stale shot) ----
-  // switch back to Bella's so the captured screenshot shows our test booking + the seed data
-  const trigger2 = page.locator('[data-slot=dropdown-menu-trigger]');
-  await trigger2.click();
-  await page.waitForSelector('[role=menu]', { timeout: 5000 });
-  const bellasItem = page.locator('[role=menuitem]', { hasText: "Bella's Salon" });
-  await Promise.all([
-    page.waitForResponse(
-      (r) => r.request().method() === "POST" && r.url().endsWith("/dashboard"),
-    ),
-    bellasItem.click(),
-  ]);
+  // capture Pinecrest for cross-tenant proof
   await page.goto(`${BASE}/dashboard`);
-  await page.waitForSelector('[data-testid="new-booking-form"]');
+  await page.waitForSelector('[data-testid="bookings-summary"]');
   await page.screenshot({
-    path: `${SCREENSHOT_DIR}/03-dashboard.png`,
-    fullPage: true,
+    path: `${SCREENSHOT_DIR}/05-dashboard-pinecrest.png`,
+    fullPage: false,
   });
-  pass(`captured 03-dashboard.png with Phase 2 booking form + recent list`);
+  pass(`captured 05-dashboard-pinecrest.png`);
 
   console.log("\nALL PHASE 2 CHECKS PASSED");
 } catch (err) {

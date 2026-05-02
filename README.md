@@ -39,10 +39,10 @@ Seed data ships as Bella's Salon: haircut, color, blowout services; staff named 
 
 Screenshots land in `/screenshots/` as each phase ships. More appear here as the build progresses.
 
-### Phase 1 and 2
-
-![Landing](screenshots/01-home.png)
-![Sign in](screenshots/02-sign-in.png)
-![Dashboard with bookings list and inline status actions](screenshots/03-dashboard.png)
+![Bookings dashboard with filters, pagination, and inline actions](screenshots/03-dashboard.png)
+![Edit booking dialog (reschedule + notes + delete)](screenshots/07-edit-dialog.png)
+![Mobile-responsive layout (390px wide)](screenshots/06-bookings-mobile.png)
 ![Org switcher](screenshots/04-org-switcher.png)
 ![Switched to Pinecrest Clinic](screenshots/05-dashboard-pinecrest.png)
+![Sign in](screenshots/02-sign-in.png)
+![Landing](screenshots/01-home.png)
