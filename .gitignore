@@ -21,12 +21,12 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# Drizzle
-drizzle/
-
 # Postgres
 *.sql.bak
 postgres-data/
+
+# Claude Code
+.claude/
 
 # OS / editor
 .DS_Store
