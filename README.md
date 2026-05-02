@@ -37,9 +37,10 @@ Seed data ships as Bella's Salon: haircut, color, blowout services; staff named 
 
 ## Screenshots
 
-Screenshots land in `/screenshots/` as each phase ships. They will appear here as the build progresses.
+Screenshots land in `/screenshots/` as each phase ships. More appear here as the build progresses.
 
-![Bookings dashboard](screenshots/03-bookings-dashboard.png)
-![Calendar week view](screenshots/04-calendar-week.png)
-![Analytics home](screenshots/05-analytics-home.png)
-![Public booking page](screenshots/06-public-book.png)
+### Phase 1
+
+![Landing](screenshots/01-home.png)
+![Sign in](screenshots/02-sign-in.png)
+![Dashboard placeholder](screenshots/03-dashboard.png)
