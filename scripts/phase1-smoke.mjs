@@ -1,8 +1,14 @@
 import { chromium } from "playwright";
+import { execSync } from "node:child_process";
 import assert from "node:assert/strict";
 
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 const SCREENSHOT_DIR = "/home/atif/projects/slate/screenshots";
+
+if (!process.env.SKIP_SEED) {
+  console.log("seeding database...");
+  execSync("pnpm db:seed", { stdio: "ignore", cwd: "/home/atif/projects/slate" });
+}
 
 const fail = (msg) => {
   console.error(`FAIL: ${msg}`);
